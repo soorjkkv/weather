@@ -6,12 +6,15 @@ const BLOB_EXPIRY_MINUTES = 2;
 const LAT = '12.0750375';
 const LON = '75.2727863';
 const API_KEY = process.env.WEATHER_API_KEY;
+const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 
 export default async function handler(req, res) {
   try {
+    // Try to return cached blob if it's recent
     try {
       const blobRes = await get(BLOB_NAME);
       const blobJson = await fetch(blobRes.url).then(res => res.json());
+
       const lastTime = new Date(blobJson.current_weather.time).getTime();
       const now = Date.now();
       const diffMinutes = (now - lastTime) / 60000;
@@ -19,10 +22,11 @@ export default async function handler(req, res) {
       if (diffMinutes < BLOB_EXPIRY_MINUTES) {
         return res.status(200).json(blobJson);
       }
-    } catch {
-      // No blob or failed to parse – continue to fetch
+    } catch (e) {
+      // No existing blob or failed fetch
     }
 
+    // Fetch from OpenWeather API
     const apiUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${LAT}&lon=${LON}&units=metric&appid=${API_KEY}`;
     const apiRes = await fetch(apiUrl);
 
@@ -47,10 +51,11 @@ export default async function handler(req, res) {
       }
     };
 
-    const encoded = JSON.stringify(structured);
-
-    await put(BLOB_NAME, encoded, {
+    // Save to blob storage (cache it)
+    await put(BLOB_NAME, JSON.stringify(structured), {
       access: 'public',
+      token: BLOB_TOKEN, // ✅ Secure token for read/write
+      allowOverwrite: true,
     });
 
     return res.status(200).json(structured);

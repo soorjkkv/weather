@@ -8,6 +8,13 @@ const LON = '75.2727863';
 const API_KEY = process.env.WEATHER_API_KEY;
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
 
+function getISTISOString() {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const istTime = new Date(utc + 5.5 * 60 * 60000);
+  return istTime.toISOString().slice(0, 16);
+}
+
 export default async function handler(req, res) {
   try {
     // Try to return cached blob if it's recent
@@ -36,6 +43,8 @@ export default async function handler(req, res) {
 
     const data = await apiRes.json();
 
+    const istTimeString = getISTISOString();
+
     const structured = {
       current_weather: {
         temperature: Math.round((data.main.temp ?? 0) * 10) / 10,
@@ -43,10 +52,10 @@ export default async function handler(req, res) {
         winddirection: data.wind.deg ?? 0,
         is_day: (new Date().getHours() >= 6 && new Date().getHours() <= 18) ? 1 : 0,
         weathercode: data.weather?.[0]?.id ?? 0,
-        time: new Date().toISOString().slice(0, 16)
+        time: istTimeString
       },
       hourly: {
-        time: [new Date().toISOString().slice(0, 16)],
+        time: [istTimeString],
         relativehumidity_2m: [Math.round(data.main.humidity ?? 0)]
       }
     };
@@ -54,7 +63,7 @@ export default async function handler(req, res) {
     // Save to blob storage (cache it)
     await put(BLOB_NAME, JSON.stringify(structured), {
       access: 'public',
-      token: BLOB_TOKEN, // ✅ Secure token for read/write
+      token: BLOB_TOKEN,
       allowOverwrite: true,
     });
 
